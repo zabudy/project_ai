@@ -1,5 +1,3 @@
-Вот адаптированная версия `AGENTS.md` под твой проект `project_ai`:
-
 ```markdown
 # AGENTS.md
 
