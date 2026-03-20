@@ -1,324 +1,313 @@
-
 ---
-skill: skill-authoring
-version: 1.0
-applies-to: all
-activates-when: "task involves creating or modifying skills in the /skills directory"
----
-
-# SKILL.md — How to Write Skills for Project AI
-
-## What Is a Skill?
-
-A skill is a **modular, self-contained knowledge package** that extends `AGENTS.md` by giving a specialist agent procedural expertise in a specific domain. Skills do not replace agents — they equip them.
-
-Think of it this way for Project AI:
-- `AGENTS.md` defines **who** the agents are and **how** they collaborate in the AI development team
-- `commands/` defines **what actions** agents can take (like `create-prd.md`, `plan-feature.md`)
-- `skills/` defines **how to do things well** within an AI-specific domain
-
-A skill answers the question: *"What does an expert in AI engineering know that a general-purpose model might get wrong?"*
-
+name: telegram-bot
+description: >
+  Create and scaffold Telegram bots using python-telegram-bot (v20+) with support for
+  commands, FSM (Conversation handlers), inline keyboards, and SQLite/PostgreSQL database
+  integration. Use when the user wants to: (1) generate a ready-to-run bot project,
+  (2) add new handlers or FSM flows to an existing bot, (3) connect a database to a bot,
+  (4) understand architecture patterns for medium-complexity bots, or (5) debug or extend
+  existing python-telegram-bot code.
 ---
 
-## Skill File Structure for Project AI
+# Telegram Bot Skill
 
-Every skill lives at `skills/[domain]/SKILL.md` and must follow this structure:
+Build Telegram bots with `python-telegram-bot` v20+ (async API).
+
+## Project Structure
 
 ```
-skills/
-└── [domain]/           ← e.g., `ai-prompting`, `cost-optimization`, `model-selection`
-    └── SKILL.md        ← the skill file
+my_bot/
+├── bot.py              # Entry point, Application setup
+├── config.py           # Settings (token, DB URL via env vars)
+├── handlers/
+│   ├── __init__.py
+│   ├── common.py       # /start, /help, cancel
+│   └── <feature>.py    # One file per FSM flow or feature
+├── db/
+│   ├── __init__.py
+│   └── models.py       # DB init + CRUD helpers
+└── requirements.txt
 ```
 
-If the skill needs supplementary reference material (patterns, snippets, checklists), add them as sibling files:
+## Quick Start
 
-```
-skills/
-└── [domain]/
-    ├── SKILL.md
-    ├── patterns.md     ← optional: reusable AI prompt patterns
-    └── checklist.md    ← optional: AI implementation review checklist
-```
+### bot.py
 
----
+```python
+import asyncio
+from telegram.ext import Application
+from config import BOT_TOKEN
+from handlers.common import start_handler, cancel_handler
+from handlers.registration import registration_conv  # example FSM
 
-## Required Sections in Every Skill
+async def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(start_handler)
+    app.add_handler(registration_conv)
+    await app.run_polling()
 
-### 1. Header Block
-```yaml
----
-skill: [domain-name]
-version: 1.0
-applies-to: [which agent(s) use this skill: product-manager, architect, implementer, tester, reviewer, all]
-activates-when: [condition that triggers loading this skill]
----
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-**`applies-to`** — which agent loads this skill. For Project AI:
-- `product-manager` — for skills about requirement gathering, PRD writing
-- `architect` — for skills about system design, AI architecture
-- `implementer` — for skills about coding, AI integration
-- `tester` — for skills about testing AI systems
-- `reviewer` — for skills about code review
-- `all` — for foundational skills
+### config.py
 
-**`activates-when`** — the condition that tells the orchestrator to inject this skill into the agent's context. Examples for Project AI:
-- `PRD mentions "OpenAI" or "LLM integration"`
-- `task involves prompt engineering`
-- `feature requires cost tracking for AI API calls`
-- `implementing RAG (Retrieval-Augmented Generation) pattern`
-
----
-
-### 2. Domain Overview (2–3 sentences)
-What this AI-specific domain is, why it's distinct from traditional software engineering, and what an agent without this skill would likely get wrong.
-
-**Example for `ai-prompting` skill:**
-"Prompt engineering is the discipline of designing inputs to LLMs to get reliable, structured outputs. Unlike traditional programming where behavior is deterministic, prompts require understanding model biases, token limitations, and output formatting. Without this skill, agents would treat prompts as simple strings and miss critical optimization opportunities."
-
----
-
-### 3. Core Principles
-5–10 opinionated, specific rules that define quality in this AI domain.
-
-**Good principle for Project AI:** "Always set `temperature=0` for deterministic tasks like data extraction — only increase temperature for creative generation when explicitly required."
-
-**Bad principle:** "Write good prompts." (too vague, not actionable)
-
-Each principle should include:
-- **The rule** (one sentence)
-- **Why it matters** (one sentence, specific to AI systems)
-- **What the violation looks like** (one sentence)
-
-Example:
-```
-Rule: Version control prompts like code, stored in dedicated files, not embedded in application logic.
-Why: Prompts evolve rapidly; embedding them makes iteration impossible and breaks the ability to A/B test.
-Violation: A prompt string hardcoded inside a Python function with no history of changes.
+```python
+import os
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///bot.db")
 ```
 
----
+### requirements.txt
 
-### 4. Procedural Knowledge (the main body)
-The "how to" content that a general-purpose model lacks. This is domain-specific to AI engineering. Structure it as step-by-step workflows, decision trees, or annotated patterns — whatever best captures the knowledge.
-
-Organize by task type. Example for an `ai-integration` skill for Project AI:
-
-#### How to Choose an AI Model
-1. **Define the task type:** Classification? Generation? Summarization? Reasoning?
-2. **Evaluate latency requirements:** Real-time (< 2s) vs. batch processing?
-3. **Calculate cost constraints:** Budget per 1K tokens, monthly volume
-4. **Check context window needs:** Does the task need 4K, 16K, or 100K+ tokens?
-5. **Test with representative samples:** Run 20-50 examples through candidate models
-6. **Document the decision:** Why this model, what tradeoffs were accepted
-
-#### How to Implement an AI Call with Error Handling
-1. Create a dedicated service class in `backend/src/services/ai_service.py`
-2. Implement retry logic with exponential backoff for 5xx errors
-3. Handle rate limits (429) with circuit breaker pattern
-4. Set reasonable timeouts (start with 30s, adjust based on model)
-5. Log token usage for cost tracking
-6. Return structured errors to the API layer
-
-#### How to Design a Prompt Template
-1. Start with a clear system message defining the AI's role
-2. Use delimiters (```, ---, ###) to separate instruction from input
-3. Include few-shot examples for complex tasks
-4. Specify output format (JSON, markdown, bullet points)
-5. Add constraints (length, tone, what to avoid)
-6. Test with edge cases before deploying
-
----
-
-### 5. Patterns & Anti-Patterns
-Concrete code-level (or design-level) examples of what to do and what to avoid in AI systems.
-
-Format:
 ```
-PATTERN: [name]
-Context: when to use this in Project AI
-✅ DO: [example or description]
-❌ DON'T: [example or description]
-Reason: [why the DO is better for AI systems]
+python-telegram-bot==20.*
+aiosqlite>=0.19
+sqlalchemy[asyncio]>=2.0
+python-dotenv
 ```
 
-Aim for 4–8 patterns per skill.
+## FSM (ConversationHandler)
 
-Example for `ai-prompting` skill:
-```
-PATTERN: Structured Output with JSON Mode
-Context: When you need the AI to return data that will be parsed programmatically
-✅ DO: 
-   prompt = """
-   Extract the following from the text:
-   - name (string)
-   - date (ISO format)
-   - amount (number)
-   
-   Return as valid JSON only, no other text.
-   """
-❌ DON'T: "Extract the name, date, and amount from this text and return them."
-Reason: Without format enforcement, the model might add explanations, vary key names, or include markdown, making parsing brittle and error-prone.
-```
+Use `ConversationHandler` for multi-step dialogs. Define states as module-level integers.
 
----
+```python
+from telegram import Update
+from telegram.ext import (
+    ConversationHandler, CommandHandler,
+    MessageHandler, filters, ContextTypes
+)
 
-### 6. Integration Points
-How this skill interacts with other parts of the Project AI system:
+NAME, AGE = range(2)
 
-- **Which files this skill's output feeds into:**
-  - `backend/src/services/ai_service.py` — for AI integration code
-  - `backend/src/services/prompt_service.py` — for prompt templates
-  - `backend/src/core/cost_tracker.py` — for usage monitoring
-  - `docs/architecture/ai-architecture.md` — for design decisions
+async def ask_name(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("What's your name?")
+    return NAME
 
-- **Which other skills this skill depends on or conflicts with:**
-  - Depends on: `python-backend` skill for implementation details
-  - Depends on: `testing` skill for AI-specific test patterns
-  - Conflicts with: `performance` skill (caching vs. freshness tradeoffs)
+async def ask_age(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data["name"] = update.message.text
+    await update.message.reply_text("How old are you?")
+    return AGE
 
-- **What the `reviewer` agent should check specifically for this domain:**
-  - Prompt injection vulnerabilities
-  - Token usage optimization
-  - Error handling for AI service failures
-  - PII leakage to external AI providers
+async def finish(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data["age"] = update.message.text
+    await update.message.reply_text(f"Got it: {ctx.user_data}")
+    return ConversationHandler.END
 
----
-
-### 7. Review Checklist
-A concrete list of things the `reviewer` agent must verify for code produced under this skill. These become the domain-specific criteria inside `commands/validation/code-review.md`.
-
-Format: yes/no checkable items, specific enough to be unambiguous.
-
-Example for `ai-integration` skill:
-```
-Review Checklist for AI Integration:
-
-- [ ] Are all AI API keys stored in environment variables, never hardcoded?
-- [ ] Is there proper error handling for rate limits (429) with retry logic?
-- [ ] Are timeouts implemented (requests don't hang indefinitely)?
-- [ ] Is token usage logged for cost tracking?
-- [ ] Are prompts stored in dedicated files/modules, not inline strings?
-- [ ] Is there validation of AI outputs before using them in business logic?
-- [ ] Are user inputs sanitized to prevent prompt injection?
-- [ ] Is PII removed or anonymized before sending to external AI providers?
-- [ ] Are there tests mocking AI responses (both success and failure cases)?
-- [ ] Is the model choice documented with rationale?
+registration_conv = ConversationHandler(
+    entry_points=[CommandHandler("register", ask_name)],
+    states={
+        NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_age)],
+        AGE:  [MessageHandler(filters.TEXT & ~filters.COMMAND, finish)],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+)
 ```
 
----
+**Rules:**
+- Always add a `cancel` fallback
+- Store temp data in `ctx.user_data`, persist to DB only at `END`
+- One `ConversationHandler` per logical flow
 
-## Skill Writing Principles for Project AI
+## Inline Keyboards
 
-**Be opinionated about AI choices.** A skill that says "you can use OpenAI, Anthropic, or open-source models" is not a skill — it's a list. Pick the recommended approach for Project AI (e.g., "Start with OpenAI GPT-4 for complex reasoning, GPT-3.5 for high-volume simple tasks") and justify why.
+```python
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-**Be specific to our AI stack.** Project AI uses Python/FastAPI backend with OpenAI integration. Skills should reference:
-- Actual libraries: `openai` Python library v1.x, `langchain` (if used)
-- Actual file paths: `src/services/ai_service.py`
-- Actual patterns: Pydantic models for request/response validation
+keyboard = InlineKeyboardMarkup([
+    [InlineKeyboardButton("Yes ✅", callback_data="yes"),
+     InlineKeyboardButton("No ❌",  callback_data="no")],
+])
 
-**Capture what models get wrong.** The most valuable content in an AI skill is the non-obvious stuff — common mistakes like:
-- Not handling token limits gracefully
-- Forgetting that models have knowledge cutoff dates
-- Assuming outputs are always truthful (hallucinations)
-- Ignoring cost implications of different models
+async def ask_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Confirm?", reply_markup=keyboard)
 
-**Stay procedural.** Skills are how-to guides, not reference docs. "First, define the system message. Then, add few-shot examples. Finally, specify output format." is better than "Prompts consist of system messages, examples, and output specifications."
+async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "yes":
+        await query.edit_message_text("Confirmed!")
+    else:
+        await query.edit_message_text("Cancelled.")
+```
 
-**Keep it scannable.** Agents read skills at the start of a task. Dense walls of text will be skimmed or ignored. Use headers, short paragraphs, and code examples.
+Register with `CallbackQueryHandler(handle_callback, pattern="^(yes|no)$")`.
 
----
+## Database (Async SQLAlchemy + SQLite)
 
-## Skill Loading Protocol for Project AI
+```python
+# db/models.py
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from config import DATABASE_URL
 
-The orchestrator is responsible for loading skills. It should:
+engine = create_async_engine(DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///"))
+AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-1. Read the `activates-when` field of all available skills at session start
-2. Match conditions against:
-   - The current PRD (`docs/prds/project_ai_prd.md`)
-   - The task description from the command being executed
-   - The current phase of implementation
-3. Inject matching skill content into the target agent's context before the agent begins work
-4. Log which skills were loaded in the Prime Report (see `commands/core_piv_loop/prime.md`)
+class Base(DeclarativeBase): pass
 
-An agent must not load its own skill — the orchestrator always decides.
+class User(Base):
+    __tablename__ = "users"
+    id:         Mapped[int] = mapped_column(primary_key=True)
+    telegram_id:Mapped[int] = mapped_column(unique=True)
+    name:       Mapped[str]
+    age:        Mapped[int]
 
----
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-## Available Skills for Project AI
+async def save_user(telegram_id: int, name: str, age: int):
+    async with AsyncSessionLocal() as session:
+        user = User(telegram_id=telegram_id, name=name, age=age)
+        session.add(user)
+        await session.commit()
+```
 
-| Skill | Domain | Applies To | Location |
-|-------|--------|-----------|----------|
-| skill-authoring | Writing skills for AI development | `all` | `skills/skill-authoring/SKILL.md` |
-| ai-prompting | Prompt design, optimization, versioning | `implementer`, `reviewer` | `skills/ai-prompting/SKILL.md` |
-| ai-integration | LLM API integration, error handling, retries | `implementer`, `architect`, `reviewer` | `skills/ai-integration/SKILL.md` |
-| cost-optimization | Token tracking, model selection, caching | `architect`, `implementer`, `reviewer` | `skills/cost-optimization/SKILL.md` |
-| rag-patterns | Retrieval-Augmented Generation design | `architect`, `implementer` | `skills/rag-patterns/SKILL.md` |
-| testing-ai | Testing strategies for AI components | `tester`, `reviewer` | `skills/testing-ai/SKILL.md` |
-| frontend-react | React UI components for AI interfaces | `coder`, `reviewer` | `skills/frontend-react/SKILL.md` |
-| python-backend | FastAPI backend development | `coder`, `architect`, `reviewer` | `skills/python-backend/SKILL.md` |
-| database-postgres | PostgreSQL schema, migrations, queries | `architect`, `coder`, `reviewer` | `skills/database-postgres/SKILL.md` |
+Call `await init_db()` once in `main()` before `run_polling()`.
 
----
+For PostgreSQL: set `DATABASE_URL=postgresql+asyncpg://user:pass@host/db` and add `asyncpg` to requirements.
 
-## Adding a New Skill for Project AI
+## Architecture Patterns
 
-1. Identify the AI-specific domain gap (what would an expert know that our agents miss?)
-2. Create `skills/[domain]/SKILL.md` following this structure
-3. Fill all required sections — no empty sections allowed
-4. Add concrete examples that reference Project AI's actual codebase structure
-5. Add the skill to the **Available Skills** table above
-6. Define a precise `activates-when` condition — vague conditions cause skill over-loading
-7. Add domain-specific checks to `commands/validation/code-review.md` under a new section
+- **One file per feature/flow** — keep handlers focused, avoid a single giant handlers.py
+- **No business logic in handlers** — handlers call DB helpers, not raw SQL
+- **Use `ctx.user_data` for session state** — cleared when bot restarts; persist important data to DB at flow end
+- **Group related `CallbackQueryHandler`s** by pattern prefix** — e.g. `"^menu_"`, `"^order_"`
 
----
+## Common Pitfalls
 
-## What a Skill Is NOT for Project AI
+| Problem | Fix |
+|---|---|
+| Handler not triggering | Check handler registration order in `add_handler`; specific before generic |
+| FSM stuck in wrong state | Ensure all states have fallback; add `allow_reentry=True` if needed |
+| Callback query timeout | Always call `await query.answer()` immediately |
+| DB session errors | Never share one session across handlers; use `async with AsyncSessionLocal()` per operation |
 
-- Not a tutorial on AI concepts for humans (agents are AI themselves)
-- Not a list of OpenAI documentation links (agents can access those directly)
-- Not a style guide (unless style directly affects AI output quality)
-- Not a replacement for `PROJECT.md` or `AGENTS.md` — skills are reusable patterns, project config is specific
+## Self-Improvement Loop
 
----
+Improve this skill autonomously using binary assertions — no manual review needed for structural checks.
 
-## Example: Minimal Valid Skill for Project AI
+### How It Works
 
-```markdown
----
-skill: example-skill
-version: 1.0
-applies-to: implementer
-activates-when: "task involves example pattern"
----
+```
+┌─────────────────────────────────────────┐
+│  1. Run test prompts through the skill  │
+│  2. Evaluate each assertion (true/false) │
+│  3. If any fail → propose one edit      │
+│  4. Re-run tests → keep edit or revert  │
+│  5. Repeat until all assertions pass    │
+└─────────────────────────────────────────┘
+```
 
-# Example Skill for Project AI
+### Eval File (`evals/skill_assertions.py`)
 
-## Domain Overview
-This is an example of the minimal valid skill structure.
+Create this file to define binary checks on Claude's output:
 
-## Core Principles
-1. **Keep it simple** — start with the simplest working solution.
-   Why: Complexity is the enemy of AI system reliability.
-   Violation: Adding caching before proving the basic flow works.
+```python
+# evals/skill_assertions.py
+# Each assertion: (description, fn(output: str) -> bool)
 
-## Procedural Knowledge
-Step 1: Create the basic implementation
-Step 2: Test with real AI calls
-Step 3: Add error handling
-Step 4: Optimize only if needed
+ASSERTIONS = [
+    # --- Structure ---
+    ("Contains project structure block",
+     lambda o: "my_bot/" in o and "bot.py" in o),
 
-## Patterns & Anti-Patterns
-PATTERN: Start Simple
-Context: First implementation of any AI feature
-✅ DO: Make a single direct API call with minimal processing
-❌ DON'T: Add retries, caching, and fallbacks from day one
-Reason: You need a baseline to know what needs optimization.
+    ("Contains requirements.txt section",
+     lambda o: "requirements.txt" in o),
 
-## Integration Points
-This skill feeds into `src/services/` implementations.
+    ("FSM example includes ConversationHandler",
+     lambda o: "ConversationHandler" in o),
 
-## Review Checklist
-- [ ] Is there a basic working version before optimizations?
-- [ ] Is the implementation testable with mocked AI responses?
+    # --- Format ---
+    ("No inline HTML tags",
+     lambda o: "<br>" not in o and "<b>" not in o),
+
+    ("Code blocks are fenced (```)",
+     lambda o: o.count("```") >= 2),
+
+    # --- Forbidden patterns ---
+    ("No synchronous requests.get() calls",
+     lambda o: "requests.get(" not in o),
+
+    ("No bare except clauses",
+     lambda o: "except:" not in o),
+
+    ("Token not hardcoded",
+     lambda o: "BOT_TOKEN" not in o.replace("os.environ", "")),
+
+    # --- Length ---
+    ("Response not too short (>200 chars)",
+     lambda o: len(o) > 200),
+
+    ("Response not too long (<8000 chars)",
+     lambda o: len(o) < 8000),
+]
+```
+
+### Test Prompts (`evals/prompts.txt`)
+
+```
+Create a basic Telegram bot with /start and /help commands.
+Build a registration flow that asks for name and email using FSM.
+Add a SQLite database to store user data.
+Show me an inline keyboard with Yes/No buttons.
+```
+
+### Running the Loop
+
+```bash
+# Single eval run
+python evals/run_evals.py --skill SKILL.md --prompts evals/prompts.txt
+
+# Autonomous improvement loop (max 10 iterations)
+python evals/run_evals.py --skill SKILL.md --prompts evals/prompts.txt --auto --max-iter 10
+```
+
+### `evals/run_evals.py` Template
+
+```python
+import subprocess, sys, importlib.util, argparse
+
+def load_assertions(path):
+    spec = importlib.util.spec_from_file_location("assertions", path)
+    mod  = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.ASSERTIONS
+
+def run_skill(prompt: str) -> str:
+    # Replace with actual Claude Code CLI call
+    result = subprocess.run(
+        ["claude", "-p", prompt, "--skill", args.skill],
+        capture_output=True, text=True
+    )
+    return result.stdout
+
+def evaluate(output: str, assertions: list) -> list[tuple]:
+    return [(desc, fn(output)) for desc, fn in assertions]
+
+def print_results(results):
+    passed = sum(1 for _, ok in results if ok)
+    for desc, ok in results:
+        print(f"  {'✅' if ok else '❌'} {desc}")
+    print(f"\n{passed}/{len(results)} passed")
+    return passed == len(results)
+```
+
+### What Binary Assertions Cover Well
+
+| ✅ Good fit | ❌ Needs human review |
+|---|---|
+| Required code blocks present | Tone and clarity |
+| Forbidden patterns absent | Creativity of examples |
+| Correct library used (async, not sync) | Quality of DB schema design |
+| Structure elements exist | Appropriateness of FSM flow |
+| Response length within bounds | Use of context from references |
+
+**Key rule:** one change per iteration — isolate what works.
+
+## References
+
+- For detailed DB patterns and migrations: see `references/db.md` (if present)
+- For deployment (systemd, Docker, webhook): see `references/deploy.md` (if present)
+- For eval loop setup: see `evals/skill_assertions.py` and `evals/run_evals.py`
